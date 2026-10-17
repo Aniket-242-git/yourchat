@@ -3,6 +3,8 @@
  *
  * State lives ONLY in this JS memory: refreshing the page clears everything.
  * Delivery: SSE primary + automatic short-polling fallback.
+ * Every POST carries the X-CSRF-Token header read from <meta name="csrf-token">
+ * (Django's CsrfViewMiddleware validates it against the signed session).
  * ========================================================================== */
 "use strict";
 
@@ -34,8 +36,8 @@ async function api(path, body) {
   const r = await fetch(path, opts);
   let j = {};
   try { j = await r.json(); } catch (e) { /* non-JSON error page */ }
-  if (r.status === 401 && j.error === "not_logged_in" && STATE.me) {
-    // session lost (server restart / cookie gone)
+  if (r.status === 401 && STATE.me) {
+    // session lost (server restart / presence expired / cookie gone)
     hardReset("Your session expired — pick a name again 💕");
   }
   return { status: r.status, data: j };
@@ -190,7 +192,7 @@ $("#nudge-form").addEventListener("submit", async (e) => {
 
 function onIncomingNudge(from) {
   if (STATE.partner) {            // already paired -> auto-decline politely
-    api("/api/respond", { from, accept: false });
+    api("/api/respond", { from_user: from, accept: false });
     return;
   }
   STATE.pendingNudgeFrom = from;
@@ -201,7 +203,7 @@ function onIncomingNudge(from) {
 $("#nudge-accept").addEventListener("click", async () => {
   const from = STATE.pendingNudgeFrom;
   $("#modal-nudge").classList.add("hidden");
-  const { data } = await api("/api/respond", { from, accept: true });
+  const { data } = await api("/api/respond", { from_user: from, accept: true });
   if (!data.ok) { toast(data.message || "Couldn't connect 😅"); return; }
   // both sides receive an "accept" event which opens the chat
 });
@@ -209,7 +211,7 @@ $("#nudge-accept").addEventListener("click", async () => {
 $("#nudge-decline").addEventListener("click", async () => {
   const from = STATE.pendingNudgeFrom;
   $("#modal-nudge").classList.add("hidden");
-  await api("/api/respond", { from, accept: false });
+  await api("/api/respond", { from_user: from, accept: false });
 });
 
 function onAccepted(from) {

@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+{% load static %}<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -6,12 +6,13 @@
   <meta name="theme-color" content="#ff6fa5">
   <title>Couple Chat 💕</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/static/css/style.css">
-  <!-- CSRF token for all POSTs (double-submit with signed session) -->
-  <meta name="csrf-token" content="{{ csrf|e }}">
-  <!-- VAPID public key injected by Flask; empty when push isn't configured -->
-  <meta name="vapid-public-key" content="{{ vapid_public_key|e }}">
-  <meta name="push-enabled" content="{{ '1' if push_enabled else '0' }}">
+  <link rel="stylesheet" href="{% static 'css/style.css' %}">
+  <!-- CSRF token for all POSTs (double-submit with the Django session).
+       Django's CsrfViewMiddleware accepts it via the X-CSRF-Token header. -->
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <!-- VAPID public key injected by Django; empty when push isn't configured -->
+  <meta name="vapid-public-key" content="{{ vapid_public_key|escape }}">
+  <meta name="push-enabled" content="{% if push_enabled %}1{% else %}0{% endif %}">
 </head>
 <body>
 
@@ -130,7 +131,7 @@
   <!-- Toast for transient events -->
   <div id="toast" class="toast hidden" role="status"></div>
 
-  <script src="/static/js/crypto.js"></script>
-  <script src="/static/js/app.js"></script>
+  <script src="{% static 'js/crypto.js' %}"></script>
+  <script src="{% static 'js/app.js' %}"></script>
 </body>
 </html>

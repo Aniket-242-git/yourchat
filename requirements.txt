@@ -1,6 +1,9 @@
-# Couple Chat — pure-Python dependencies (pip-installable, no system packages)
-Flask==3.0.3
-Werkzeug==3.0.3
-pywebpush==1.14.1       # Web Push with VAPID (pulls http-ece, cryptography, ecdsa, pyasn1)
-PyMySQL==1.1.1          # pure-Python MySQL driver for production (ENV=prod)
-python-dotenv==1.0.1    # optional: load .env during local development
+# Couple Chat — Django + DRF backend requirements
+# Install into the cPanel virtualenv:  pip install -r requirements.txt
+
+Django>=5.0,<6.0            # UI (templates/views) + session framework
+djangorestframework>=3.15   # REST API under /api/*
+
+python-dotenv>=1.0          # loads .env in local dev only (absent on cPanel)
+pywebpush>=2.0              # Web Push (VAPID) — optional feature, content-free pings
+PyMySQL>=1.1                # MySQL driver used when ENV=prod (cPanel shared hosting)
