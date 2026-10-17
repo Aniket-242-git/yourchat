@@ -1,0 +1,35 @@
+# ==========================================================================
+# Couple Chat — Apache/LiteSpeed hardening for cPanel.
+# Copy to ".htaccess" in the application root (~/couplechat).
+# ==========================================================================
+
+# --- Privacy: stop the web server logging request bodies/queries ---------
+# Passenger handles the app itself; these directives keep any Apache-level
+# logs minimal. Also consider turning off "Access Log" for the domain in
+# cPanel → Metrics → Logs, or redirecting it to /dev/null where allowed.
+SetEnvIfNoCase Request_URI "^/api/(send|send_locked|poll|events)" nolog
+CustomLog /dev/null common env=nolog
+
+# --- Never serve internal directories directly ---------------------------
+RewriteEngine On
+RewriteRule ^tmp/ - [F,L]
+RewriteRule ^scripts/ - [F,L]
+RewriteRule ^tests/ - [F,L]
+RewriteRule ^\.env - [F,L]
+RewriteRule ^vapid_keys - [F,L]
+
+# --- Force HTTPS (Web Push requires it) ----------------------------------
+RewriteCond %{HTTPS} !=on
+RewriteRule ^(.*)$ https://%{HTTP_HOST}/$1 [R=301,L]
+
+# --- Extra safety headers (the app also sets these; belt & braces) -------
+<IfModule mod_headers.c>
+  Header always set X-Frame-Options "DENY"
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set Referrer-Policy "no-referrer"
+</IfModule>
+
+# --- Block dotfiles everywhere --------------------------------------------
+<FilesMatch "^\.">
+  Require all denied
+</FilesMatch>
