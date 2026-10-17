@@ -1,0 +1,6 @@
+# Couple Chat — pure-Python dependencies (pip-installable, no system packages)
+Flask==3.0.3
+Werkzeug==3.0.3
+pywebpush==1.14.1       # Web Push with VAPID (pulls http-ece, cryptography, ecdsa, pyasn1)
+PyMySQL==1.1.1          # pure-Python MySQL driver for production (ENV=prod)
+python-dotenv==1.0.1    # optional: load .env during local development

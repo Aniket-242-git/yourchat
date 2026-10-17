@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#ff6fa5">
+  <title>Couple Chat 💕</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="stylesheet" href="/static/css/style.css">
+  <!-- CSRF token for all POSTs (double-submit with signed session) -->
+  <meta name="csrf-token" content="{{ csrf|e }}">
+  <!-- VAPID public key injected by Flask; empty when push isn't configured -->
+  <meta name="vapid-public-key" content="{{ vapid_public_key|e }}">
+  <meta name="push-enabled" content="{{ '1' if push_enabled else '0' }}">
+</head>
+<body>
+
+  <!-- ============ SCREEN 1 · Username entry ============ -->
+  <section id="screen-login" class="screen active">
+    <div class="card">
+      <div class="logo">💞</div>
+      <h1>Couple Chat</h1>
+      <p class="subtitle">Private chats for two. No signup, nothing saved.</p>
+      <form id="login-form" autocomplete="off">
+        <input id="login-username" type="text" maxlength="24"
+               placeholder="Pick a username…" aria-label="Username" required>
+        <button type="submit" class="btn btn-primary">Enter 💗</button>
+      </form>
+      <p id="login-error" class="error" role="alert"></p>
+      <p class="tiny">Names are held only while you're active, then forgotten.</p>
+    </div>
+  </section>
+
+  <!-- ============ SCREEN 2 · Waiting / Connect ============ -->
+  <section id="screen-waiting" class="screen">
+    <div class="card">
+      <div class="logo">👋</div>
+      <h1>Hi <span id="waiting-me" class="accent"></span>!</h1>
+      <p class="subtitle">Connect with someone to start chatting.</p>
+      <form id="nudge-form" autocomplete="off">
+        <input id="nudge-target" type="text" maxlength="24"
+               placeholder="Their username…" aria-label="Partner username" required>
+        <button type="submit" class="btn btn-primary">Send a nudge 💌</button>
+      </form>
+      <p id="nudge-status" class="status-line" role="status"></p>
+      <div class="row">
+        <span id="waiting-online" class="pill">online: —</span>
+        <button id="logout-btn" class="btn btn-ghost small">Log out</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SCREEN 3 · Chat ============ -->
+  <section id="screen-chat" class="screen column">
+    <header class="chat-header">
+      <div class="who">
+        <strong id="chat-partner">💗</strong>
+        <span id="chat-conn" class="dot dot-off" title="connection status"></span>
+      </div>
+      <div class="actions">
+        <button id="lock-toggle" class="icon-btn" title="Send locked message" aria-pressed="false">🔒</button>
+        <button id="disconnect-btn" class="btn btn-ghost small">Disconnect</button>
+      </div>
+    </header>
+
+    <div id="messages" class="messages" aria-live="polite">
+      <p class="empty-hint">Say something sweet… 🌸<br><span class="tiny">(refreshing clears this chat forever)</span></p>
+    </div>
+
+    <div id="typing-indicator" class="typing hidden">typing…</div>
+
+    <footer class="composer">
+      <form id="send-form" autocomplete="off">
+        <input id="msg-input" type="text" maxlength="4000"
+               placeholder="Type a message…" aria-label="Message">
+        <button type="submit" class="btn btn-primary round" aria-label="Send">➤</button>
+      </form>
+      <p id="chat-error" class="error inline" role="alert"></p>
+    </footer>
+  </section>
+
+  <!-- ============ MODAL · Nudge accept/decline ============ -->
+  <div id="modal-nudge" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="nudge-text">
+    <div class="modal-box">
+      <div class="logo">💌</div>
+      <p id="nudge-text"><strong class="accent"></strong> wants to connect with you!</p>
+      <div class="row center">
+        <button id="nudge-accept" class="btn btn-primary">Accept 💗</button>
+        <button id="nudge-decline" class="btn btn-ghost">Decline</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ MODAL · Set password for outgoing locked message ============ -->
+  <div id="modal-lock-send" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="lock-send-title">
+    <div class="modal-box">
+      <div class="logo">🔐</div>
+      <h2 id="lock-send-title">Locked message</h2>
+      <p class="subtitle tiny">Encrypted in <em>your</em> browser (AES-256-GCM). The server never sees your text or password.</p>
+      <form id="lock-send-form">
+        <textarea id="lock-msg" maxlength="4000" rows="3" placeholder="Secret message…" required></textarea>
+        <input id="lock-pass" type="password" placeholder="Password" autocomplete="new-password" required>
+        <input id="lock-pass2" type="password" placeholder="Repeat password" autocomplete="new-password" required>
+        <p id="lock-send-error" class="error"></p>
+        <div class="row center">
+          <button type="submit" class="btn btn-primary">Encrypt &amp; Send 🔒</button>
+          <button type="button" id="lock-send-cancel" class="btn btn-ghost">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============ MODAL · Unlock incoming locked message ============ -->
+  <div id="modal-lock-open" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="lock-open-title">
+    <div class="modal-box">
+      <div class="logo">🗝️</div>
+      <h2 id="lock-open-title">Enter the password</h2>
+      <p class="subtitle tiny">Decrypts locally. Attempts left: <span id="unlock-tries">5</span>. Once opened it will hide after 30 seconds.</p>
+      <form id="lock-open-form">
+        <input id="unlock-pass" type="password" placeholder="Password" autocomplete="off" required>
+        <p id="lock-open-error" class="error"></p>
+        <div class="row center">
+          <button type="submit" class="btn btn-primary">Unlock 💞</button>
+          <button type="button" id="lock-open-cancel" class="btn btn-ghost">Not now</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast for transient events -->
+  <div id="toast" class="toast hidden" role="status"></div>
+
+  <script src="/static/js/crypto.js"></script>
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
