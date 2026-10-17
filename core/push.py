@@ -9,14 +9,12 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from typing import Optional
 
-import config
+from core import settings as config
 
 log = logging.getLogger("couplechat.push")
-
-# Payload size guard for browsers (Chrome caps ~4KB); ours are tiny.
-_TITLE_DEFAULT = "Couple Chat 💌"
 
 
 def send_push(subscription: dict, title: str, body: str, tag: Optional[str] = None) -> bool:
@@ -29,7 +27,7 @@ def send_push(subscription: dict, title: str, body: str, tag: Optional[str] = No
     if not config.PUSH_ENABLED:
         return False
     try:
-        from pywebpush import webpush, WebPushException
+        from pywebpush import webpush  # lazy import: optional feature
 
         webpush(
             subscription_info=subscription,
@@ -38,14 +36,14 @@ def send_push(subscription: dict, title: str, body: str, tag: Optional[str] = No
             vapid_claims={
                 "sub": config.VAPID_CLAIMS_EMAIL,
                 # iat must be within the last 24h
-                "iat": int(__import__("time").time()),
+                "iat": int(time.time()),
             },
             ttl=30,          # don't let brokers queue stale notifications
             timeout=10,
         )
         return True
     except Exception as exc:  # expired endpoint, network hiccup etc.
-        # Log ONLY exception class + endpoint host — never tokens/keys.
+        # Log ONLY exception class + endpoint host — never tokens/keys/bodies.
         log.warning("push failed (%s): %s", type(exc).__name__, _safe_endpoint(subscription))
         return False
 

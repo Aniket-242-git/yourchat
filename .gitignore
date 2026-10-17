@@ -1,8 +1,11 @@
-tmp/
 __pycache__/
 *.pyc
 .env
-vapid_keys.json
-
-.env
-.htaccess
+.env.local
+.env.*.local
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db

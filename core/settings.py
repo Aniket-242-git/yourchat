@@ -1,18 +1,20 @@
 """
-Couple Chat – central configuration.
+Couple Chat – central tunables for the core library (store / push).
 
-All tunables live here and can be overridden with environment variables so the
-same code runs in development (SQLite) and production (MySQL on cPanel).
+All values can be overridden with environment variables so the SAME code runs
+in development (SQLite) and production (MySQL on cPanel shared hosting).
 
 Environment variables
 ---------------------
 ENV                     "prod" -> MySQL, anything else -> SQLite   (default: dev)
-SECRET_KEY              Flask session secret. REQUIRED in prod.
-DATABASE_URL / DB settings (see _mysql_config below)
+DJANGO_SECRET_KEY       Django session secret (read by couplechat/settings.py;
+                        listed here for completeness)
+DB_*                    MySQL connection settings (used when ENV == prod)
+SQLITE_PATH             path of the dev SQLite file
 VAPID_PUBLIC_KEY        Web Push VAPID public key  (base64url)
-VAPID_PRIVATE_KEY       Web Push VAPID private key (base64url)  -- keep secret!
+VAPID_PRIVATE_KEY       Web Push VAPID private key (base64url) -- keep secret!
 VAPID_CLAIMS_EMAIL      Contact email for VAPID, e.g. "mailto:you@example.com"
-TTLS / rate limits      see constants below
+TTLs / rate limits      see constants below
 """
 import os
 
@@ -27,19 +29,16 @@ def env_bool(name: str, default: bool = False) -> bool:
 ENV = os.environ.get("ENV", "dev").strip().lower()
 IS_PROD = ENV == "prod"
 
-# Flask session secret. In production this MUST be set in the cPanel app
-# environment; we refuse to fall back to an insecure default there.
-SECRET_KEY = os.environ.get("SECRET_KEY") or os.urandom(32).hex()
-
 # --------------------------------------------------------------------------
 # Storage backend selection:  MySQL when ENV == "prod", otherwise SQLite.
+# The store holds ONLY transient operational state (see store.py docstring).
 # --------------------------------------------------------------------------
 DB_BACKEND = "mysql" if IS_PROD else "sqlite"
 
-# SQLite (dev): a temp file shared between Passenger processes.
+# SQLite (dev): a temp file shared between Passenger processes/threads.
 SQLITE_PATH = os.environ.get(
     "SQLITE_PATH",
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "tmp", "couplechat.sqlite"),
+    os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tmp", "couplechat.sqlite"),
 )
 
 # MySQL (prod): standard DB_* variables as used by cPanel.
@@ -54,22 +53,23 @@ MYSQL_CONFIG = {
 # --------------------------------------------------------------------------
 # Privacy / TTLs — everything in the store auto-expires.
 # --------------------------------------------------------------------------
-PRESENCE_TTL = int(os.environ.get("PRESENCE_TTL", "75"))     # heartbeat every ~25s
-NUDGE_TTL = int(os.environ.get("NUDGE_TTL", "90"))           # pending connect request
-QUEUE_MAX_PER_USER = int(os.environ.get("QUEUE_MAX", "200"))  # bounded event queue
-PUSH_SUB_TTL = int(os.environ.get("PUSH_SUB_TTL", "86400"))  # push subs kept 24h max
-SUB_SWEEP_EVERY = int(os.environ.get("SUB_SWEEP_EVERY", "50"))  # GC push subs every N writes
+PRESENCE_TTL = int(os.environ.get("PRESENCE_TTL", "75"))       # heartbeat every ~25s
+NUDGE_TTL = int(os.environ.get("NUDGE_TTL", "90"))             # pending connect request
+QUEUE_MAX_PER_USER = int(os.environ.get("QUEUE_MAX", "200"))   # bounded event queue
+QUEUE_EVENT_TTL = int(os.environ.get("QUEUE_EVENT_TTL", "180"))  # relayed payloads purged after 3 min
+PUSH_SUB_TTL = int(os.environ.get("PUSH_SUB_TTL", "86400"))    # push subs kept 24h max
+SUB_SWEEP_EVERY = int(os.environ.get("SUB_SWEEP_EVERY", "50"))  # GC sweep every N writes
 
 # --------------------------------------------------------------------------
-# Rate limiting (sliding window counters kept in the shared store)
+# Rate limiting (sliding-window counters kept in the shared store)
 # --------------------------------------------------------------------------
 RL_NUDGE = (int(os.environ.get("RL_NUDGE_MAX", "5")), 60)      # nudges per minute
 RL_MSG = (int(os.environ.get("RL_MSG_MAX", "30")), 60)         # messages per minute
 RL_LOGIN = (int(os.environ.get("RL_LOGIN_MAX", "10")), 60)     # login attempts/min/user
-RL_LOCKED = (int(os.environ.get("RL_LOCKED_MAX", "10")), 60)   # unlock attempts/min/msg
+RL_TYPING = (15, 60)                                           # typing pings per minute
 
-MAX_MESSAGE_LEN = 4000        # plaintext cap enforced client+server
-MAX_EVENT_BYTES = 64 * 1024   # hard cap on a relayed event payload (locks are small)
+MAX_MESSAGE_LEN = 4000          # plaintext cap enforced client + server
+MAX_EVENT_BYTES = 64 * 1024     # hard cap on a relayed event payload (locks are small)
 
 # --------------------------------------------------------------------------
 # Web Push (VAPID)

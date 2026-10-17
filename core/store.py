@@ -3,39 +3,46 @@ Shared, TTL-expiring state store for Couple Chat.
 
 Why this exists
 ---------------
-Phusion Passenger may spawn *multiple* worker processes for the same Flask
+Phusion Passenger may spawn *multiple* worker processes for the same Django
 app, so Python globals cannot hold shared state (usernames, pairings,
 queues...). Everything goes through this small key/value + queue store which
 is backed by:
 
 * MySQL   when ENV == "prod"   (cPanel shared hosting)
 * SQLite  otherwise            (local development; file-based so several
-                                processes can still share it)
+                                processes/threads can still share it)
+
+IMPORTANT — these tables are managed with raw SQL by this module itself
+(``kv`` and ``events``).  They are deliberately NOT Django models: Django's
+migrations/ORM must not touch them because they are a transient operational
+cache, not application data.
 
 Privacy contract
 ----------------
 Only the minimum operational data is stored, every row carries an expiry and
 is swept constantly:
 
-* kv table : usernames (presence), pairings, pending nudges, push subscriptions
+* kv table : usernames (presence), pairings, pending nudges, push subscriptions,
+             sliding-window rate-limit counters
 * events   : transient relay queue for SSE/polling — message payloads live here
-             only until they are fetched once, then deleted. Nothing about the
-             chat content persists beyond that short window; locked messages
-             only ever contain {salt, iv, ciphertext} blobs.
+             only until they are fetched once (fetch-and-delete), then are
+             removed; anything undelivered is purged after QUEUE_EVENT_TTL.
+             Nothing about chat content persists beyond that short window and
+             locked messages only ever contain {salt, iv, ciphertext} blobs
+             which are meaningless without the sender-chosen password.
 """
 from __future__ import annotations
 
 import base64
 import hashlib
 import json
-import os
 import re
 import sqlite3
 import threading
 import time
 from typing import Any, Optional
 
-import config
+from core import settings as config
 
 TTL_PRESENCE = config.PRESENCE_TTL
 TTL_NUDGE = config.NUDGE_TTL
@@ -55,6 +62,7 @@ class SqliteBackend:
     share the same file safely."""
 
     def __init__(self, path: str):
+        import os
         self._lock = threading.Lock()
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
         self._conn = sqlite3.connect(path, timeout=15, check_same_thread=False)
@@ -156,8 +164,9 @@ class SqliteBackend:
             if ids:
                 qmarks = ",".join("?" * len(ids))
                 self._conn.execute(f"DELETE FROM events WHERE id IN ({qmarks})", ids)
-            # safety sweep: drop anything older than ~3 minutes
-            self._conn.execute("DELETE FROM events WHERE created_at < ?", (now - 180,))
+            # safety sweep: drop anything undelivered for too long
+            self._conn.execute("DELETE FROM events WHERE created_at < ?",
+                                (now - config.QUEUE_EVENT_TTL,))
         out = [{"id": i, "type": t, "payload": _json_loads(p)} for i, t, p in rows]
         last = out[-1]["id"] if out else after_id
         return out, last
@@ -172,7 +181,8 @@ class SqliteBackend:
             self._conn.execute(
                 "DELETE FROM kv WHERE expires_at IS NOT NULL AND expires_at <= ?", (now,)
             )
-            self._conn.execute("DELETE FROM events WHERE created_at < ?", (now - 180,))
+            self._conn.execute("DELETE FROM events WHERE created_at < ?",
+                               (now - config.QUEUE_EVENT_TTL,))
 
 
 # ===========================================================================
@@ -300,7 +310,8 @@ class MysqlBackend:
         if ids:
             qmarks = ",".join(["%s"] * len(ids))
             cur.execute(f"DELETE FROM events WHERE id IN ({qmarks})", ids)
-        cur.execute("DELETE FROM events WHERE created_at < %s", (time.time() - 180,))
+        cur.execute("DELETE FROM events WHERE created_at < %s",
+                    (time.time() - config.QUEUE_EVENT_TTL,))
         cur.close()
         out = [{"id": i, "type": t, "payload": _json_loads(p)} for i, t, p in rows]
         last = out[-1]["id"] if out else after_id
@@ -315,7 +326,7 @@ class MysqlBackend:
         now = time.time()
         cur = self._conn().cursor()
         cur.execute("DELETE FROM kv WHERE expires_at IS NOT NULL AND expires_at <= %s", (now,))
-        cur.execute("DELETE FROM events WHERE created_at < %s", (now - 180,))
+        cur.execute("DELETE FROM events WHERE created_at < %s", (now - config.QUEUE_EVENT_TTL,))
         cur.close()
 
     # -- distributed lock (used for nudge accept race-safety) ---------------
